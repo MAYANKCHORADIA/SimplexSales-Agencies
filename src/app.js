@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import productsRoutes from './routes/products.routes.js';
 import quotationRoutes from './routes/quotation.routes.js';
+import healthRoutes from './routes/health.routes.js';
 
 const app = express();
 
@@ -26,6 +27,9 @@ app.use(
 
 // Health
 app.get('/', (req, res) => res.send('Welcome to Simplex Sales API'));
+
+// Dedicated health endpoints
+app.use('/health', healthRoutes);
 
 // Mount routes
 app.use('/api/auth', authRoutes);
