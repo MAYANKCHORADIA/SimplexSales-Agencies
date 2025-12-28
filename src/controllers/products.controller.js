@@ -1,4 +1,5 @@
 import Product from '../models/Product.model.js';
+import { uploadBufferToCloudinary } from '../utils/cloudinary.js';
 
 function findProductQuery(productId) {
 	return { $or: [{ __id: productId }, { _id: productId }] };
@@ -38,4 +39,69 @@ export async function getProductById(req, res, next) {
 	}
 }
 
-export default { viewAllProducts, getProductById };
+// Admin: create product and upload images to Cloudinary
+export async function createProduct(req, res, next) {
+	try {
+		const { name, description = '', price, sku, stock } = req.body;
+
+		if (!name) return res.status(400).json({ message: 'Product name is required' });
+
+		const images = [];
+
+		// handle files uploaded via multer memoryStorage (req.files)
+		const files = Array.isArray(req.files) ? req.files : (req.files?.images || []);
+
+		for (let i = 0; i < files.length; i++) {
+			const file = files[i];
+			if (!file || !file.buffer) continue;
+
+			// upload to cloudinary
+			const folder = process.env.CLOUDINARY_FOLDER || 'simplex-sales/products';
+			const pubOptions = { folder };
+			const result = await uploadBufferToCloudinary(file.buffer, pubOptions);
+			images.push({ url: result.secure_url, alt: file.originalname || '' });
+		}
+
+		const product = new Product({ name, description, price, sku, stock, images });
+		await product.save();
+		res.status(201).json({ product });
+	} catch (err) {
+		next(err);
+	}
+}
+
+// Admin: update product (allows adding images)
+export async function updateProduct(req, res, next) {
+	try {
+		const { productId } = req.params;
+		const update = { ...req.body };
+
+		const product = await Product.findOne(findProductQuery(productId));
+		if (!product) return res.status(404).json({ message: 'Product not found' });
+
+		// If files provided, upload and append
+		const files = Array.isArray(req.files) ? req.files : (req.files?.images || []);
+		if (files && files.length) {
+			for (let i = 0; i < files.length; i++) {
+				const file = files[i];
+				if (!file || !file.buffer) continue;
+				const folder = process.env.CLOUDINARY_FOLDER || 'simplex-sales/products';
+				const result = await uploadBufferToCloudinary(file.buffer, { folder });
+				product.images.push({ url: result.secure_url, alt: file.originalname || '' });
+			}
+		}
+
+		// apply other updates
+		Object.keys(update).forEach((k) => {
+			if (k === 'images') return; // skip images from body
+			product[k] = update[k];
+		});
+
+		await product.save();
+		res.json({ product });
+	} catch (err) {
+		next(err);
+	}
+}
+
+export default { viewAllProducts, getProductById, createProduct, updateProduct };
